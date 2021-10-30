@@ -34,13 +34,17 @@ Keys::Keys(ostream& out, const Coins& coins) : _out(out), _coins(coins) {
     _currentMnemonic = newwall.getMnemonic();
 #else
     std::unique_ptr<TWString, void(*)(TWString *)> passphrase(TWStringCreateWithUTF8Bytes(""), [](TWString *p) { TWStringDelete(p); });
-    TWHDWallet *newwall = TWHDWalletCreate(128, passphrase.get());
+    std::unique_ptr<TWHDWallet, void(*)(TWHDWallet *)> newwall(TWHDWalletCreate(128, passphrase.get()), [](TWHDWallet *p) { TWHDWalletDelete(p); });
     std::unique_ptr<TWString, void(*)(TWString *)> mnemonic(TWHDWalletMnemonic(newwall), [](TWString *p) { TWStringDelete(p); });
     _currentMnemonic = TWStringUTF8Bytes(mnemonic.get());
 #endif
 }
 
+#ifdef WALLET_CONSOLE_CPP
 void privateKeyToResult(const PrivateKey& priKey, string& res_out) {
+#else
+void privateKeyToResult(TWPrivateKey *priKey, string& res_out) {
+#endif
     // take the key, but may need to take extension as well
     res_out = hex(priKey.bytes);
     if (priKey.extensionBytes.size() > 0) {
@@ -56,11 +60,19 @@ bool Keys::newKey(const string& coinid, string& res) {
     Coin coin;
     if (!_coins.findCoin(coinid, coin)) { return false; }
 
+#ifdef WALLET_CONSOLE_CPP
     HDWallet newWallet(256, "");
 
     DerivationPath derivationPath = DerivationPath(coin.derivPath);
     PrivateKey key = newWallet.getKey(TWCoinType(coin.c), derivationPath);
-    privateKeyToResult(key, res);
+#else
+    std::unique_ptr<TWString, void(*)(TWString *)> passphrase(TWStringCreateWithUTF8Bytes(""), [](TWString *p) { TWStringDelete(p); });
+    std::unique_ptr<TWHDWallet, void(*)(TWHDWallet *)> newWallet(TWHDWalletCreate(256, passphrase.get()), [](TWHDWallet *p) { TWHDWalletDelete(p); });
+
+    std::unique_ptr<TWString, void(*)(TWString *)> derivationPath(&coin.derivPath[0], [](TWString *p) { TWStringDelete(p); });
+    std::unique_ptr<TWPrivateKey, void(*)(TWPrivateKey *)> key(TWHDWalletGetKey(newWallet, TWCoinType(coin.c), derivationPath), [](TWPrivateKey *p) {  TWPrivateKeyDelete(p); });
+#endif
+    privateKeyToResult(key.data(), res);
     return true;
 }
 
