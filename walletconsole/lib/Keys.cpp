@@ -7,12 +7,17 @@
 #include "Keys.h"
 
 #include "WalletConsole.h"
-#include "Data.h"
-#include "PrivateKey.h"
-#include "HexCoding.h"
-#include "HDWallet.h"
-#include "Mnemonic.h"
-#include "Coin.h"
+#ifdef WALLET_CONSOLE_CPP
+// #include "Data.h"
+// #include "PrivateKey.h"
+// #include "HexCoding.h"
+// #include "HDWallet.h"
+// #include "Mnemonic.h"
+// #include "Coin.h"
+#else
+#include "TrustWalletCore/TWString.h"
+#include "TrustWalletCore/TWHDWallet.h"
+#endif
 
 #include <iostream>
 #include <vector>
@@ -24,8 +29,15 @@ using namespace std;
 
 Keys::Keys(ostream& out, const Coins& coins) : _out(out), _coins(coins) {
     // init a random mnemonic
+#ifdef WALLET_CONSOLE_CPP
     HDWallet newwall(128, "");
     _currentMnemonic = newwall.getMnemonic();
+#else
+    std::unique_ptr<TWString, void(*)(TWString *)> passphrase(TWStringCreateWithUTF8Bytes(""), [](TWString *p) { TWStringDelete(p); });
+    TWHDWallet *newwall = TWHDWalletCreate(128, passphrase.get());
+    std::unique_ptr<TWString, void(*)(TWString *)> mnemonic(TWHDWalletMnemonic(newwall), [](TWString *p) { TWStringDelete(p); });
+    _currentMnemonic = TWStringUTF8Bytes(mnemonic.get());
+#endif
 }
 
 void privateKeyToResult(const PrivateKey& priKey, string& res_out) {
